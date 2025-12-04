@@ -5,10 +5,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.server.ResponseStatusException;
@@ -22,11 +21,11 @@ import java.util.List;
 import static org.hamcrest.Matchers.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(ProductController.class)
-@MockitoSettings(strictness = Strictness.LENIENT)
 class ProductControllerTest {
 
     @Autowired
@@ -55,8 +54,8 @@ class ProductControllerTest {
     }
 
     @Test
-    void getAll_ShouldReturnAllProducts() throws Exception {
-        // Arrange
+    @WithMockUser(roles = "USER")
+    void getAll_WithUserRole_ShouldReturnAllProducts() throws Exception {
         Product product2 = new Product();
         product2.setId(2);
         product2.setRegion("Asia");
@@ -65,7 +64,6 @@ class ProductControllerTest {
         List<Product> products = Arrays.asList(testProduct, product2);
         when(productService.getAll()).thenReturn(products);
 
-        // Act & Assert
         mockMvc.perform(get("/api/products"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -79,11 +77,10 @@ class ProductControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "USER")
     void getAll_WhenNoProducts_ShouldReturnEmptyList() throws Exception {
-        // Arrange
         when(productService.getAll()).thenReturn(List.of());
 
-        // Act & Assert
         mockMvc.perform(get("/api/products"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -93,11 +90,10 @@ class ProductControllerTest {
     }
 
     @Test
-    void getOne_WhenProductExists_ShouldReturnProduct() throws Exception {
-        // Arrange
+    @WithMockUser(roles = "ADMIN")
+    void getOne_WithAdminRole_WhenProductExists_ShouldReturnProduct() throws Exception {
         when(productService.getOne(1)).thenReturn(testProduct);
 
-        // Act & Assert
         mockMvc.perform(get("/api/products/1"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -114,12 +110,11 @@ class ProductControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "USER")
     void getOne_WhenProductDoesNotExist_ShouldReturn404() throws Exception {
-        // Arrange
         when(productService.getOne(999))
                 .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Запись не существует"));
 
-        // Act & Assert
         mockMvc.perform(get("/api/products/999"))
                 .andExpect(status().isNotFound());
 
@@ -127,8 +122,8 @@ class ProductControllerTest {
     }
 
     @Test
-    void add_WhenValidProduct_ShouldReturnCreatedProduct() throws Exception {
-        // Arrange
+    @WithMockUser(roles = "ADMIN")
+    void add_WithAdminRole_WhenValidProduct_ShouldReturnCreatedProduct() throws Exception {
         Product newProduct = new Product();
         newProduct.setRegion("Africa");
         newProduct.setCountry("Kenya");
@@ -152,8 +147,8 @@ class ProductControllerTest {
 
         when(productService.add(any(Product.class))).thenReturn(savedProduct);
 
-        // Act & Assert
         mockMvc.perform(post("/api/products")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(newProduct)))
                 .andExpect(status().isCreated())
@@ -166,13 +161,13 @@ class ProductControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "USER")
     void add_WhenProductAlreadyExists_ShouldReturn409() throws Exception {
-        // Arrange
         when(productService.add(any(Product.class)))
                 .thenThrow(new ResponseStatusException(HttpStatus.CONFLICT, "Запись создана ранее"));
 
-        // Act & Assert
         mockMvc.perform(post("/api/products")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(testProduct)))
                 .andExpect(status().isConflict());
@@ -181,13 +176,13 @@ class ProductControllerTest {
     }
 
     @Test
-    void update_WhenProductExists_ShouldReturnUpdatedProduct() throws Exception {
-        // Arrange
+    @WithMockUser(roles = "ADMIN")
+    void update_WithAdminRole_WhenProductExists_ShouldReturnUpdatedProduct() throws Exception {
         testProduct.setTotalProfit(6000.0);
         when(productService.update(any(Product.class))).thenReturn(testProduct);
 
-        // Act & Assert
         mockMvc.perform(put("/api/products")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(testProduct)))
                 .andExpect(status().isOk())
@@ -199,13 +194,13 @@ class ProductControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "USER")
     void update_WhenProductDoesNotExist_ShouldReturn404() throws Exception {
-        // Arrange
         when(productService.update(any(Product.class)))
                 .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Запись не существует"));
 
-        // Act & Assert
         mockMvc.perform(put("/api/products")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(testProduct)))
                 .andExpect(status().isNotFound());
@@ -214,37 +209,36 @@ class ProductControllerTest {
     }
 
     @Test
-    void delete_WhenProductExists_ShouldReturn204() throws Exception {
-        // Arrange
+    @WithMockUser(roles = "ADMIN")
+    void delete_WithAdminRole_WhenProductExists_ShouldReturn204() throws Exception {
         doNothing().when(productService).delete(1);
 
-        // Act & Assert
-        mockMvc.perform(delete("/api/products/1"))
+        mockMvc.perform(delete("/api/products/1")
+                        .with(csrf()))
                 .andExpect(status().isNoContent());
 
         verify(productService, times(1)).delete(1);
     }
 
     @Test
+    @WithMockUser(roles = "USER")
     void delete_WhenProductDoesNotExist_ShouldReturn404() throws Exception {
-        // Arrange
         doThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Запись не существует"))
                 .when(productService).delete(999);
 
-        // Act & Assert
-        mockMvc.perform(delete("/api/products/999"))
+        mockMvc.perform(delete("/api/products/999")
+                        .with(csrf()))
                 .andExpect(status().isNotFound());
 
         verify(productService, times(1)).delete(999);
     }
 
     @Test
-    void averageProfitPerUnit_ShouldReturnAverageValue() throws Exception {
-        // Arrange
+    @WithMockUser(roles = "USER")
+    void averageProfitPerUnit_WithUserRole_ShouldReturnAverageValue() throws Exception {
         double expectedAverage = 50.75;
         when(productService.findAverageProfitPerUnit()).thenReturn(expectedAverage);
 
-        // Act & Assert
         mockMvc.perform(get("/api/products/avg"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -254,11 +248,10 @@ class ProductControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "ADMIN")
     void averageProfitPerUnit_WhenNoData_ShouldReturnZero() throws Exception {
-        // Arrange
         when(productService.findAverageProfitPerUnit()).thenReturn(0.0);
 
-        // Act & Assert
         mockMvc.perform(get("/api/products/avg"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
